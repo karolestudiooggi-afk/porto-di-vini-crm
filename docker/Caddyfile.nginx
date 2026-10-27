@@ -1,0 +1,32 @@
+# Caddy atrás do nginx da VPS (docker-compose.nginx.yml). Só HTTP, na porta 80
+# do container (publicada em 127.0.0.1:CRM_PORTA_LOCAL). O HTTPS é do nginx.
+# Mesmas rotas do Caddyfile principal.
+{
+	auto_https off
+	servers {
+		# Confia no X-Forwarded-Proto/For que o nginx manda (vem da rede do Docker).
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	redir /api /api/ 308
+
+	handle_path /api/* {
+		reverse_proxy api:8081
+	}
+
+	handle_path /auth/v1/* {
+		reverse_proxy auth:9999
+	}
+
+	handle_path /storage/v1/* {
+		reverse_proxy storage:5000
+	}
+
+	handle {
+		reverse_proxy front:3000
+	}
+
+	header -Server
+}

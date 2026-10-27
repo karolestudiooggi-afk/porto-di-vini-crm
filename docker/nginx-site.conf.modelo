@@ -1,0 +1,21 @@
+# CRM Porto Di Vino no nginx da VPS (modo docker-compose.nginx.yml).
+# Gerado pelo ./scripts/instalar.sh a partir de docker/nginx-site.conf.modelo.
+# O certbot acrescenta o bloco 443 e o redirecionamento para HTTPS.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMINIO__;
+
+    # Importação de contatos (até 10 MB) e imagens dos templates.
+    client_max_body_size 64m;
+
+    location / {
+        proxy_pass http://127.0.0.1:__PORTA__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+}

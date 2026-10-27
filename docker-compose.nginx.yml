@@ -1,0 +1,26 @@
+# =============================================================================
+# Modo "atrás do nginx": para VPS que já tem um nginx nas portas 80/443
+# (outros sites no mesmo servidor).
+#
+# O Caddy do CRM deixa de falar com a internet: escuta só em
+# 127.0.0.1:${CRM_PORTA_LOCAL} (HTTP), e o nginx da VPS cuida do domínio e do
+# HTTPS (certbot), repassando tudo para essa porta. As rotas internas
+# (/api, /auth/v1, /storage/v1, front) continuam no Caddy.
+#
+# Não precisa ligar à mão: o ./scripts/instalar.sh detecta o nginx e grava no
+# .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.nginx.yml
+#   CRM_PORTA_LOCAL=8085
+# =============================================================================
+
+services:
+  caddy:
+    ports: !override
+      - "127.0.0.1:${CRM_PORTA_LOCAL:-8085}:80"
+    volumes: !override
+      - ./docker/Caddyfile.nginx:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    # Sem o apelido do domínio na rede interna: aqui o HTTPS é do nginx, então
+    # a API chega em https://<domínio> pelo nginx da própria VPS.
+    networks: !reset {}

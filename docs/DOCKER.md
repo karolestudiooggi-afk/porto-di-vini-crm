@@ -88,6 +88,29 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/crm_portodivino" \
 cd ~/crm-portodivino && git config core.sshCommand "ssh -i ~/.ssh/crm_portodivino"
 ```
 
+## VPS que já tem nginx (caso da Porto)
+
+Se as portas 80/443 já estão com o nginx da VPS (outros sites no mesmo
+servidor), o `instalar.sh` percebe sozinho e:
+
+1. grava no `.env` `COMPOSE_FILE=docker-compose.yml:docker-compose.nginx.yml`
+   e `CRM_PORTA_LOCAL` (8085, ou a próxima livre): o Caddy do CRM passa a
+   escutar só em `127.0.0.1:<porta>`, sem HTTPS próprio;
+2. cria o site do CRM no nginx (`/etc/nginx/sites-available/crm-portodivino.conf`,
+   a partir de `docker/nginx-site.conf.modelo`), confere com `nginx -t` e
+   recarrega — se o nginx recusar, o arquivo sai e os outros sites ficam como
+   estavam;
+3. pede o certificado com o certbot (`--nginx --redirect`). Se o DNS ainda não
+   aponta para a VPS, avisa e você roda depois:
+   `sudo certbot --nginx -d crmportodivino.estudiodomaniai.com.br --redirect`
+
+Ele pede `sudo` para mexer no nginx. Os comandos `docker compose` do dia a dia
+continuam iguais: o `COMPOSE_FILE` do `.env` já inclui o arquivo do nginx.
+
+Com pouca memória livre (memória + swap abaixo de 2,5 GB), o `instalar.sh`
+para antes do build e mostra como criar 2 GB de swap: num servidor com outros
+sites, um build sem folga faz o kernel matar processos dos vizinhos.
+
 ## O sync Domani → banco
 
 É o que traz os contatos do WhatsApp da Porto (canal no Domani) para o banco

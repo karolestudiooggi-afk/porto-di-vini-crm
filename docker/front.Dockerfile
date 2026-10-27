@@ -2,7 +2,10 @@
 # NEXT_PUBLIC_* são gravadas no build (vêm de args do docker-compose.yml).
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+# Teto de memória do build: em VPS que divide espaço com outros sites, melhor
+# o build ir mais devagar do que disputar RAM com eles.
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS=--max-old-space-size=1536
 
 COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./
 RUN npm ci --no-audit --no-fund
