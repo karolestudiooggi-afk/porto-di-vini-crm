@@ -10,7 +10,7 @@ CRM da Porto Di Vino, gerado a partir do template CRM Domani. O foco é o
 |---|---|
 | Endereço do CRM | `https://crmportodivino.estudiodomaniai.com.br` |
 | Provedor de envio | SendPulse, SMTP `smtp-pulse.com:587` (TLS) — conta da Domani, a mesma de todos os CRMs |
-| Remetente | `Porto Di Vino <contato@portodivino.com.br>` — **a confirmar com a Porto** |
+| Remetente | `Porto Di Vino <site@portodivino.com.br>` |
 | Domínio que precisa de autenticação | `portodivino.com.br` ([DNS-PORTODIVINO.md](docs/DNS-PORTODIVINO.md)) |
 | Servidor | VPS própria da Porto, com Docker ([DOCKER.md](docs/DOCKER.md)), pasta `~/crm-portodivino` |
 
@@ -21,7 +21,7 @@ O código está pronto; o que segura o disparo está fora dele.
 | # | Item | Situação | Com quem |
 |---|---|---|---|
 | 1 | Saber onde está o DNS do `portodivino.com.br` e quem tem acesso | pedido à Porto | Porto |
-| 2 | Definir a caixa que assina as campanhas (hoje `contato@`, provisório) | pedido à Porto | Porto |
+| 2 | Caixa que assina as campanhas: `site@portodivino.com.br` | definido | — |
 | 3 | SPF + DKIM do SendPulse no DNS; DMARC já existe (`p=none`), manter | depois do 1 | quem cuida do DNS |
 | 4 | Remetente `@portodivino.com.br` verificado na conta SendPulse da Domani | depois do 2 | Domani |
 | 5 | Base de e-mails: exportação do e-commerce/clube **com o consentimento** | pedir à Porto | Porto |

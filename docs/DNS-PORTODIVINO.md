@@ -76,9 +76,9 @@ envio sem falhas — não é necessário para começar.
 
 ## Remetente
 
-O endereço que assina as campanhas (sugestão: `contato@portodivino.com.br`, a
-confirmar) precisa **existir como caixa**: é para ele que vão as respostas dos
-clientes e o e-mail de confirmação do SendPulse.
+As campanhas saem como `Porto Di Vino <site@portodivino.com.br>`. A caixa
+`site@` já existe na Porto: é para ela que vão as respostas dos clientes e o
+e-mail de confirmação do SendPulse.
 
 ## Como conferir
 
