@@ -40,7 +40,8 @@ gravar_env() {
 
 # psql no banco do CRM, dentro do container `db` (backend/sql montado em /crm-sql).
 psql_db() {
-  docker compose exec -T db psql -v ON_ERROR_STOP=1 -q -U postgres -d postgres "$@"
+  docker compose exec -T -e PGOPTIONS='-c client_min_messages=warning' db \
+    psql -v ON_ERROR_STOP=1 -q -U postgres -d postgres "$@"
 }
 
 # Aplica as migrations 0*.sql que ainda não rodaram, na ordem, e o seed.
