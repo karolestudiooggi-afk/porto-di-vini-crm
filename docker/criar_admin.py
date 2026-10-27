@@ -1,6 +1,6 @@
 """Cria o primeiro admin do CRM (ou promove uma conta existente a admin).
 
-Uso, na VPS:  ./scripts/criar-admin.sh email@dominio "Nome da pessoa"
+Uso, na VPS:  ./scripts/criar-admin.sh   (padrão: ai@estudiooggi.com)
 
 1. Cria a conta no Supabase Auth já confirmada (sem e-mail de confirmação),
    falando direto com o serviço `auth` pela rede interna do Docker — funciona

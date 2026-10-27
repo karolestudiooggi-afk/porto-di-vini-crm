@@ -75,7 +75,7 @@ git clone https://github.com/karolestudiooggi-afk/porto-di-vini-crm.git ~/crm-po
 cd ~/crm-portodivino
 cp .env.example .env && nano .env     # DOMANI_API_KEY, senha SMTP do SendPulse, SMTP de convites
 ./scripts/instalar.sh                 # gera segredos, sobe, migra, seed e primeiro sync
-./scripts/criar-admin.sh rick@estudiooggi.com "Rick"
+./scripts/criar-admin.sh              # admin: ai@estudiooggi.com (pede a senha)
 ```
 
 Antes: registro A de `crmportodivino.estudiodomaniai.com.br` apontando para a

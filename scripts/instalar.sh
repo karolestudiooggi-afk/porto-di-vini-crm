@@ -173,7 +173,7 @@ $(printf '\033[1;32m')CRM no ar.$(printf '\033[0m')
 
   Endereço:     https://$dominio
   Primeiro admin (uma vez só):
-                ./scripts/criar-admin.sh email@dominio "Nome"
+                ./scripts/criar-admin.sh     (ai@estudiooggi.com)
 
   Ver o que está rodando:   docker compose ps
   Logs:                     docker compose logs -f api agendador

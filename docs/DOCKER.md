@@ -65,11 +65,12 @@ nano .env
 ./scripts/instalar.sh
 
 # 5. Primeiro admin (pede a senha)
-./scripts/criar-admin.sh rick@estudiooggi.com "Rick"
+./scripts/criar-admin.sh              # admin: ai@estudiooggi.com (pede a senha)
 ```
 
-Depois, `https://crmportodivino.estudiodomaniai.com.br` e login com esse
-e-mail. Os demais acessos entram por convite, na tela Usuários.
+Depois, `https://crmportodivino.estudiodomaniai.com.br` e login com
+`ai@estudiooggi.com` (o admin de sempre dos CRMs Domani). Os demais acessos
+entram por convite, na tela Usuários.
 
 O `instalar.sh` pode rodar de novo: não recria o banco nem troca segredo que já
 existe, e só aplica migration que ainda não rodou.
