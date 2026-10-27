@@ -1,0 +1,1 @@
+"""Sync diário Domani -> CRM."""

@@ -1,0 +1,237 @@
+# CRM Porto Di Vino
+
+CRM da Porto Di Vino, gerado a partir do template CRM Domani. O foco é o
+**disparador de e-mail**: montar a base, segmentar e disparar campanhas pelo
+**SendPulse** — o mesmo provedor e o mesmo código de envio do CRM da Mamma Jamma
+(cota por hora/dia/mês, retomada automática, supressão de bounce e descadastro,
+`List-Unsubscribe` de um clique).
+
+| | |
+|---|---|
+| Endereço do CRM | `https://crmportodivino.estudiodomaniai.com.br` |
+| Provedor de envio | SendPulse, SMTP `smtp-pulse.com:587` (TLS) — conta da Domani, a mesma de todos os CRMs |
+| Remetente | `Porto Di Vino <contato@portodivino.com.br>` — **a confirmar com a Porto** |
+| Domínio que precisa de autenticação | `portodivino.com.br` ([DNS-PORTODIVINO.md](docs/DNS-PORTODIVINO.md)) |
+| Servidor | VPS própria da Porto, pasta `/home/domani/crm-portodivino` (usuário `domani`) |
+
+## O que falta antes do primeiro envio real
+
+O código está pronto; o que segura o disparo está fora dele.
+
+| # | Item | Situação | Com quem |
+|---|---|---|---|
+| 1 | Saber onde está o DNS do `portodivino.com.br` e quem tem acesso | pedido à Porto | Porto |
+| 2 | Definir a caixa que assina as campanhas (hoje `contato@`, provisório) | pedido à Porto | Porto |
+| 3 | SPF + DKIM do SendPulse no DNS; DMARC já existe (`p=none`), manter | depois do 1 | quem cuida do DNS |
+| 4 | Remetente `@portodivino.com.br` verificado na conta SendPulse da Domani | depois do 2 | Domani |
+| 5 | Base de e-mails: exportação do e-commerce/clube **com o consentimento** | pedir à Porto | Porto |
+| 6 | VPS da Porto, Supabase e registro A de `crmportodivino.estudiodomaniai.com.br` | a fazer | Domani |
+| 7 | Aquecimento do domínio: ~2 semanas subindo `SMTP_LIMITE_DIA` | depois do 3 | Domani |
+
+A conta SendPulse é uma só para todos os CRMs: a cota do mês e o limite de
+2.500/h são divididos. A Porto começa com 5.000/mês (`SMTP_LIMITE_MES`); a soma
+de todos os CRMs não pode passar do plano. Ver
+[DISPARADOR.md](docs/DISPARADOR.md#conta-sendpulse-compartilhada).
+
+Sobre o item 5: o Domani (WhatsApp) quase nunca traz e-mail. Só recebe campanha
+quem tem e-mail na ficha, então o público vem da importação em **Contatos**
+(CSV/XLSX, [planilha modelo](docs/modelos/modelo-importacao-contatos.csv)). Uma
+coluna `opt_in_email` (ou `aceita_email`) com "não" barra a pessoa para sempre.
+
+## Módulos ligados
+
+Em `frontend/src/config/cliente.ts`. Desligado, o módulo some do menu e a rota
+mostra "módulo desligado".
+
+| Módulo | Estado | Por quê |
+|---|---|---|
+| Base: Dashboard, Contatos, Usuários | ligado | sempre |
+| `campanhas` (E-mail) | **ligado** | o foco deste CRM |
+| `agente` | ligado | aba do Agente IA, presente em todos os CRMs Domani |
+| `auditoria` | ligado | alterações manuais, só admin |
+| `parceiros`, `avaliacoes`, `rankings` | desligado | a Porto não pediu |
+| `integracoes.*` (iFood, Google, Tripadvisor, Reclame Aqui) | desligado | idem |
+
+Para ligar um módulo depois: variáveis no `.env` (bloco do `.env.example` do
+template), chave em `cliente.ts`, API reiniciada e build do front.
+
+## Onde mora a configuração da Porto
+
+| Onde | O quê |
+|---|---|
+| `.env` (raiz, de `.env.example`) | segredos, SMTP do SendPulse, remetente, limites de envio, `CLIENTE_NOME` |
+| `frontend/.env` (de `frontend/.env.example`) e `frontend/src/config/cliente.ts` | nome exibido, API, Supabase, vocabulário e módulos |
+| `backend/sql/seeds/cliente.sql` | remetente das campanhas em `email.remetentes` |
+
+## Subir do zero
+
+1. **Repositório.** Suba esta pasta para um repositório novo da Porto.
+2. **`.env` do backend.** `cp .env.example .env` e preencha Supabase,
+   `DOMANI_API_KEY` da Porto, SMTP de convites e o SMTP do SendPulse. Deixe
+   `EMAIL_DRY_RUN=true`.
+3. **`.env` do front.** `cp frontend/.env.example frontend/.env` e preencha a
+   chave `anon` (e a URL do Supabase, se for na nuvem).
+4. **Migrations.** `001` → `021`, na ordem (as de integrações entram também:
+   são inofensivas e deixam o banco pronto se um módulo for ligado depois):
+   ```bash
+   for f in backend/sql/0*.sql; do
+     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
+   done
+   ```
+5. **Seed da Porto.** Confira o remetente e rode:
+   ```bash
+   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/sql/seeds/cliente.sql
+   ```
+6. **Primeiro admin.** Crie o usuário no Supabase Auth e vincule ao papel
+   `admin` em `app.usuarios` ([API.md](docs/API.md#primeiro-usuário)). Os
+   demais entram por convite, pela tela Usuários.
+7. **Build.** Backend: `cd backend && uv sync && uv run pytest`, e um sync
+   controlado (`DOMANI_SYNC_LIMIT=50 uv run python -m sync.main`). Front:
+   `cd frontend && npm ci && npm run build`.
+8. **Servidor.** Units de `docs/systemd/` (`crm-portodivino-api`,
+   `crm-portodivino-front`, `crm-portodivino-sync.timer`,
+   `crm-portodivino-agenda.timer`) e `docs/nginx/crm-portodivino.conf`, com
+   HTTPS pelo certbot ([DEPLOY.md](docs/DEPLOY.md)). VPS própria da Porto:
+   as portas do template (API `8081`, front `3000`) ficam como estão.
+9. **Base de e-mails.** Importe a planilha da Porto em Contatos.
+10. **Primeiro envio.** Só depois do DNS autenticado e do roteiro de
+    [DISPARADOR.md](docs/DISPARADOR.md#antes-de-disparar-de-verdade): dry-run,
+    teste com 2 ou 3 e-mails da equipe, depois a campanha real.
+
+Atualizações depois do primeiro deploy: banco → **API reiniciada** → build do
+front, nessa ordem ([DEPLOY.md](docs/DEPLOY.md#atualizar-um-cliente-que-já-está-no-ar)).
+
+## Stack
+
+- **Backend**: FastAPI + psycopg (async), Python 3.13 com [uv](https://docs.astral.sh/uv/).
+- **Front**: Next.js 14 (App Router) + Tailwind, no design system Domani.
+- **Banco e login**: Supabase — Postgres e Auth. O Supabase emite o JWT; o
+  FastAPI é a porta de acesso ao banco, e a service role nunca sai do backend.
+- **Produção**: systemd (API, front e timers) + nginx (`/api/` → API, `/` → front).
+
+```text
+Domani (WhatsApp da Porto) -> sync diário -> crm.contatos <- importação CSV/XLSX
+                                                  |            (base do e-commerce/clube)
+                                                  v
+          FastAPI (/api) <---- segmentos -> email.* -> SMTP SendPulse -> caixa do cliente
+                |                                         (From: @portodivino.com.br,
+            Next.js (/)                                    DKIM assinado pelo SendPulse)
+```
+
+## Estrutura
+
+```text
+backend/
+├── app/                  # FastAPI: auth, RBAC, rotas e serviços
+├── sql/
+│   ├── 001_…sql … 021_…sql   # migrations, na ordem
+│   └── seeds/
+│       └── cliente.sql       # remetente da Porto
+├── sync/                 # sync diário Domani -> crm.contatos
+└── tests/
+frontend/
+└── src/config/cliente.ts # nome, vocabulário e módulos da Porto
+docs/
+├── DNS-PORTODIVINO.md    # o que configurar no DNS do portodivino.com.br
+├── DISPARADOR.md         # campanhas: cota, público, entregabilidade, aquecimento
+├── systemd/              # crm-portodivino-api, -front, -sync, -agenda
+├── nginx/crm-portodivino.conf
+└── modelos/              # planilha modelo de importação
+```
+
+## Migrations
+
+Reaplicar a sequência inteira, na ordem, não desfaz o que foi configurado pela
+tela. Nenhuma traz dado de cliente: isso é papel do seed.
+
+| # | O quê |
+|---|---|
+| `001` | ficha unificada (`crm.contatos`), com o Domani como fonte |
+| `002` | schema do e-mail: templates, campanhas, destinatários, eventos, supressões |
+| `003` | API: papéis, permissões (RBAC), usuários, auditoria e notas manuais |
+| `004` | envio real: consumo do provedor, supressão por bounce, remetentes autorizados |
+| `005` | reserva atômica do lote de envio (estado `processando`) |
+| `006` | convites de acesso |
+| `007` | PDV Alpha Code: cadastro e consumo por webhook |
+| `008` | avaliação/NPS (`avaliacao.*`) |
+| `009` | permissões do operador: tudo, menos usuários e auditoria |
+| `010` | cota diária de envio |
+| `011` | cota mensal de envio |
+| `012` | métricas de campanha: bounce, descadastro e taxas |
+| `013` | integrações iFood e Google (`integra.*`) |
+| `014` | tentativas do agente do iFood: erro passageiro não é definitivo |
+| `015` | e-mail para parceiros |
+| `016` | monitor de reputação: Tripadvisor e Reclame Aqui |
+| `017` | chave da IA e lojas só no servidor |
+| `018` | resposta do Google pelo NichoChat (status `encaminhada`) |
+| `019` | leitura automática das avaliações do Google |
+| `020` | busca do Google pelo NichoChat |
+| `021` | comentário do Google em partes |
+
+## Desenvolvimento
+
+```bash
+cd backend
+uv sync
+uv run pytest
+uv run uvicorn app.main:app --reload     # Swagger em http://127.0.0.1:8000/docs
+
+cd frontend
+cp .env.example .env
+npm install && npm run dev               # sem API/Supabase roda em modo demo
+```
+
+O contrato completo da API está em [`docs/API.md`](docs/API.md).
+
+## Contatos
+
+A API importa e exporta contatos em CSV/XLSX. Importações fazem merge por
+telefone ou e-mail; o sync Domani posterior complementa a mesma ficha.
+Exclusões ficam ocultas até uma nova atividade Domani ou reimportação explícita.
+
+## Sync Domani
+
+```bash
+cd backend
+uv run python -m sync.main
+```
+
+| variável | papel |
+|---|---|
+| `DATABASE_URL` | Postgres/Supabase |
+| `DOMANI_API_URL` | base da API Domani |
+| `DOMANI_API_KEY` | conta da Porto no Domani |
+| `DOMANI_SYNC_LIMIT` | teto opcional para teste controlado |
+| `DOMANI_INCLUDE_LABELS` | default `true` |
+| `DOMANI_RESET_STATE` | default `true`; reconciliação completa diária |
+
+Quando `DOMANI_SYNC_LIMIT` está definido, etiquetas são puladas para impedir um
+reset global seguido de reconciliação parcial.
+
+A reconciliação de etiquetas é atômica: todas as páginas são lidas antes de o
+banco ser alterado. Depois, o reset e a reaplicação acontecem na mesma transação;
+uma falha de API ou banco preserva o estado anterior.
+
+O sync faz upsert por `user_ns`, depois por telefone canônico e, por último, pela
+identidade social `(canal, domani_user_id)`. Em Instagram, Facebook e TikTok o
+`user_id` nunca é interpretado como telefone.
+
+Em produção roda pelo `crm-portodivino-sync.timer`, todo dia às 06:00
+(`America/Sao_Paulo`).
+
+## Documentação
+
+| Doc | O quê |
+|---|---|
+| [DNS-PORTODIVINO.md](docs/DNS-PORTODIVINO.md) | registros SPF/DKIM/DMARC do `portodivino.com.br` para o SendPulse |
+| [DISPARADOR.md](docs/DISPARADOR.md) | campanhas: cota, regras de público, entregabilidade, aquecimento, timer |
+| [API.md](docs/API.md) | contrato da API, permissões e primeiro usuário |
+| [DEPLOY.md](docs/DEPLOY.md) | servidor, passo a passo, e como atualizar |
+| [DISPARADOR-PROPRIO.md](docs/DISPARADOR-PROPRIO.md) | transporte alternativo pelo disparador HTTP da Domani |
+| [frontend/README.md](frontend/README.md) | front-end: módulos, decisões, design system |
+
+Docs dos módulos desligados (vêm do template, para quando forem ligados):
+[PARCEIROS.md](docs/PARCEIROS.md), [AVALIACAO.md](docs/AVALIACAO.md),
+[INTEGRACOES.md](docs/INTEGRACOES.md),
+[MONITOR-REPUTACAO.md](docs/MONITOR-REPUTACAO.md),
+[INTEGRACAO-ALPHACODE.md](docs/INTEGRACAO-ALPHACODE.md).

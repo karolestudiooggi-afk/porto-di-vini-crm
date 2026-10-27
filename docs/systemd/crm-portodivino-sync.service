@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync Domani -> CRM Porto Di Vino
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=domani
+WorkingDirectory=/home/domani/crm-portodivino/backend
+ExecStart=/home/domani/.local/bin/uv run python -m sync.main
+TimeoutStartSec=1800

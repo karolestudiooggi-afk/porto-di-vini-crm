@@ -1,0 +1,18 @@
+[Unit]
+Description=Front-end Next.js do CRM Porto Di Vino
+After=network-online.target crm-portodivino-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=domani
+Group=domani
+WorkingDirectory=/home/domani/crm-portodivino/frontend
+# Serve o build de `npm run build`. Ajuste o caminho do npm (`which npm`).
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

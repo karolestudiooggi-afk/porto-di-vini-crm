@@ -1,0 +1,17 @@
+[Unit]
+Description=API FastAPI do CRM Porto Di Vino
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=domani
+Group=domani
+WorkingDirectory=/home/domani/crm-portodivino/backend
+ExecStart=/home/domani/crm-portodivino/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8081 --root-path /api
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

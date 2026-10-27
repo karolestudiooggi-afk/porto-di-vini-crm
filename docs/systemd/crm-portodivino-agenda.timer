@@ -1,0 +1,10 @@
+[Unit]
+Description=Roda a continuacao de campanhas de hora em hora
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=crm-portodivino-agenda.service
+
+[Install]
+WantedBy=timers.target

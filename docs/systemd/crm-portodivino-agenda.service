@@ -1,0 +1,11 @@
+[Unit]
+Description=Continua campanhas de e-mail pendentes e agendadas
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=domani
+WorkingDirectory=/home/domani/crm-portodivino/backend
+ExecStart=/home/domani/crm-portodivino/backend/.venv/bin/python -m app.services.agenda
+TimeoutStartSec=3600

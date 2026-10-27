@@ -1,0 +1,10 @@
+[Unit]
+Description=Executa o sync Domani -> CRM diariamente
+
+[Timer]
+OnCalendar=06:00 America/Sao_Paulo
+Persistent=true
+Unit=crm-portodivino-sync.service
+
+[Install]
+WantedBy=timers.target
