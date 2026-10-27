@@ -227,6 +227,9 @@ POST   /email/campanhas/{id}/cancelar           cancela o restante da fila
 
 ## Continuação automática (timer)
 
+> **No Docker** quem faz isso é o serviço `agendador` (toda hora cheia); não
+> há timer do systemd para instalar. Logs: `docker compose logs -f agendador`.
+
 Uma campanha maior que a cota sai em levas. **A continuação é automática** —
 `crm-portodivino-agenda.timer` roda de hora em hora e:
 

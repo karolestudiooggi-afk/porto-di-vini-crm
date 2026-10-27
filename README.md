@@ -12,7 +12,7 @@ CRM da Porto Di Vino, gerado a partir do template CRM Domani. O foco é o
 | Provedor de envio | SendPulse, SMTP `smtp-pulse.com:587` (TLS) — conta da Domani, a mesma de todos os CRMs |
 | Remetente | `Porto Di Vino <contato@portodivino.com.br>` — **a confirmar com a Porto** |
 | Domínio que precisa de autenticação | `portodivino.com.br` ([DNS-PORTODIVINO.md](docs/DNS-PORTODIVINO.md)) |
-| Servidor | VPS própria da Porto, pasta `/home/domani/crm-portodivino` (usuário `domani`) |
+| Servidor | VPS própria da Porto, com Docker ([DOCKER.md](docs/DOCKER.md)), pasta `~/crm-portodivino` |
 
 ## O que falta antes do primeiro envio real
 
@@ -25,7 +25,7 @@ O código está pronto; o que segura o disparo está fora dele.
 | 3 | SPF + DKIM do SendPulse no DNS; DMARC já existe (`p=none`), manter | depois do 1 | quem cuida do DNS |
 | 4 | Remetente `@portodivino.com.br` verificado na conta SendPulse da Domani | depois do 2 | Domani |
 | 5 | Base de e-mails: exportação do e-commerce/clube **com o consentimento** | pedir à Porto | Porto |
-| 6 | VPS da Porto, Supabase e registro A de `crmportodivino.estudiodomaniai.com.br` | a fazer | Domani |
+| 6 | Registro A de `crmportodivino.estudiodomaniai.com.br` → IP da VPS, e `./scripts/instalar.sh` | a fazer | Domani |
 | 7 | Aquecimento do domínio: ~2 semanas subindo `SMTP_LIMITE_DIA` | depois do 3 | Domani |
 
 A conta SendPulse é uma só para todos os CRMs: a cota do mês e o limite de
@@ -60,46 +60,37 @@ template), chave em `cliente.ts`, API reiniciada e build do front.
 | Onde | O quê |
 |---|---|
 | `.env` (raiz, de `.env.example`) | segredos, SMTP do SendPulse, remetente, limites de envio, `CLIENTE_NOME` |
-| `frontend/.env` (de `frontend/.env.example`) e `frontend/src/config/cliente.ts` | nome exibido, API, Supabase, vocabulário e módulos |
+| `frontend/src/config/cliente.ts` | vocabulário e módulos (no Docker, nome, API e Supabase do front vêm do `.env` da raiz) |
 | `backend/sql/seeds/cliente.sql` | remetente das campanhas em `email.remetentes` |
 
-## Subir do zero
+## Subir do zero (Docker na VPS)
 
-1. **Repositório.** Suba esta pasta para um repositório novo da Porto.
-2. **`.env` do backend.** `cp .env.example .env` e preencha Supabase,
-   `DOMANI_API_KEY` da Porto, SMTP de convites e o SMTP do SendPulse. Deixe
-   `EMAIL_DRY_RUN=true`.
-3. **`.env` do front.** `cp frontend/.env.example frontend/.env` e preencha a
-   chave `anon` (e a URL do Supabase, se for na nuvem).
-4. **Migrations.** `001` → `021`, na ordem (as de integrações entram também:
-   são inofensivas e deixam o banco pronto se um módulo for ligado depois):
-   ```bash
-   for f in backend/sql/0*.sql; do
-     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || break
-   done
-   ```
-5. **Seed da Porto.** Confira o remetente e rode:
-   ```bash
-   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/sql/seeds/cliente.sql
-   ```
-6. **Primeiro admin.** Crie o usuário no Supabase Auth e vincule ao papel
-   `admin` em `app.usuarios` ([API.md](docs/API.md#primeiro-usuário)). Os
-   demais entram por convite, pela tela Usuários.
-7. **Build.** Backend: `cd backend && uv sync && uv run pytest`, e um sync
-   controlado (`DOMANI_SYNC_LIMIT=50 uv run python -m sync.main`). Front:
-   `cd frontend && npm ci && npm run build`.
-8. **Servidor.** Units de `docs/systemd/` (`crm-portodivino-api`,
-   `crm-portodivino-front`, `crm-portodivino-sync.timer`,
-   `crm-portodivino-agenda.timer`) e `docs/nginx/crm-portodivino.conf`, com
-   HTTPS pelo certbot ([DEPLOY.md](docs/DEPLOY.md)). VPS própria da Porto:
-   as portas do template (API `8081`, front `3000`) ficam como estão.
-9. **Base de e-mails.** Importe a planilha da Porto em Contatos.
-10. **Primeiro envio.** Só depois do DNS autenticado e do roteiro de
-    [DISPARADOR.md](docs/DISPARADOR.md#antes-de-disparar-de-verdade): dry-run,
-    teste com 2 ou 3 e-mails da equipe, depois a campanha real.
+Um `docker compose` sobe tudo na VPS da Porto: banco do cliente (Postgres do
+Supabase), login, API, front, o sync diário com a Domani, a continuação das
+campanhas e o HTTPS. Passo a passo completo em [DOCKER.md](docs/DOCKER.md).
 
-Atualizações depois do primeiro deploy: banco → **API reiniciada** → build do
-front, nessa ordem ([DEPLOY.md](docs/DEPLOY.md#atualizar-um-cliente-que-já-está-no-ar)).
+```bash
+curl -fsSL https://get.docker.com | sh
+git clone https://github.com/karolestudiooggi-afk/porto-di-vini-crm.git ~/crm-portodivino
+cd ~/crm-portodivino
+cp .env.example .env && nano .env     # DOMANI_API_KEY, senha SMTP do SendPulse, SMTP de convites
+./scripts/instalar.sh                 # gera segredos, sobe, migra, seed e primeiro sync
+./scripts/criar-admin.sh rick@estudiooggi.com "Rick"
+```
+
+Antes: registro A de `crmportodivino.estudiodomaniai.com.br` apontando para a
+VPS (o Caddy tira o certificado HTTPS sozinho). Depois:
+
+1. **Base de e-mails.** Importe a planilha da Porto em Contatos.
+2. **Primeiro envio.** Só depois do DNS do `portodivino.com.br` autenticado e
+   do roteiro de [DISPARADOR.md](docs/DISPARADOR.md#antes-de-disparar-de-verdade):
+   dry-run, teste com 2 ou 3 e-mails da equipe, depois a campanha real.
+
+Atualizar depois de um push: `./scripts/atualizar.sh` (código, imagens,
+migrations novas e serviços, nessa ordem).
+
+O caminho manual do template (systemd + nginx + Supabase à parte) continua em
+[DEPLOY.md](docs/DEPLOY.md), para quem não quiser Docker.
 
 ## Stack
 
@@ -107,7 +98,8 @@ front, nessa ordem ([DEPLOY.md](docs/DEPLOY.md#atualizar-um-cliente-que-já-est�
 - **Front**: Next.js 14 (App Router) + Tailwind, no design system Domani.
 - **Banco e login**: Supabase — Postgres e Auth. O Supabase emite o JWT; o
   FastAPI é a porta de acesso ao banco, e a service role nunca sai do backend.
-- **Produção**: systemd (API, front e timers) + nginx (`/api/` → API, `/` → front).
+- **Produção**: Docker Compose na VPS — Caddy (HTTPS), front, API, agendador e o
+  recorte do Supabase (Postgres, Auth, Storage). Ver [DOCKER.md](docs/DOCKER.md).
 
 ```text
 Domani (WhatsApp da Porto) -> sync diário -> crm.contatos <- importação CSV/XLSX
@@ -134,15 +126,20 @@ frontend/
 docs/
 ├── DNS-PORTODIVINO.md    # o que configurar no DNS do portodivino.com.br
 ├── DISPARADOR.md         # campanhas: cota, público, entregabilidade, aquecimento
-├── systemd/              # crm-portodivino-api, -front, -sync, -agenda
-├── nginx/crm-portodivino.conf
+├── DOCKER.md             # subir na VPS com Docker
+├── systemd/, nginx/      # caminho manual, sem Docker (DEPLOY.md)
 └── modelos/              # planilha modelo de importação
+docker/                   # Dockerfiles, Caddyfile, init do banco, agendador
+scripts/                  # instalar, atualizar, criar-admin, backup
+docker-compose.yml
 ```
 
 ## Migrations
 
-Reaplicar a sequência inteira, na ordem, não desfaz o que foi configurado pela
-tela. Nenhuma traz dado de cliente: isso é papel do seed.
+No Docker, o `instalar.sh`/`atualizar.sh` aplica cada migration **uma vez só**
+e registra em `controle.migracoes`. Reaplicar a sequência inteira não é
+seguro: a `004` recria a view de consumo com colunas que a `010`/`011` mudaram,
+e o Postgres recusa. Nenhuma migration traz dado de cliente: isso é papel do seed.
 
 | # | O quê |
 |---|---|
@@ -216,8 +213,9 @@ O sync faz upsert por `user_ns`, depois por telefone canônico e, por último, p
 identidade social `(canal, domani_user_id)`. Em Instagram, Facebook e TikTok o
 `user_id` nunca é interpretado como telefone.
 
-Em produção roda pelo `crm-portodivino-sync.timer`, todo dia às 06:00
-(`America/Sao_Paulo`).
+Em produção roda pelo serviço `agendador` do Docker, todo dia às 06:00
+(`America/Sao_Paulo`; outros horários em `SYNC_HORARIOS`). Na mão:
+`docker compose exec api python -m sync.main`.
 
 ## Documentação
 
@@ -226,7 +224,8 @@ Em produção roda pelo `crm-portodivino-sync.timer`, todo dia às 06:00
 | [DNS-PORTODIVINO.md](docs/DNS-PORTODIVINO.md) | registros SPF/DKIM/DMARC do `portodivino.com.br` para o SendPulse |
 | [DISPARADOR.md](docs/DISPARADOR.md) | campanhas: cota, regras de público, entregabilidade, aquecimento, timer |
 | [API.md](docs/API.md) | contrato da API, permissões e primeiro usuário |
-| [DEPLOY.md](docs/DEPLOY.md) | servidor, passo a passo, e como atualizar |
+| [DOCKER.md](docs/DOCKER.md) | **subir na VPS com Docker**: instalar, sync, atualizar, backup |
+| [DEPLOY.md](docs/DEPLOY.md) | caminho manual (systemd + nginx), sem Docker |
 | [DISPARADOR-PROPRIO.md](docs/DISPARADOR-PROPRIO.md) | transporte alternativo pelo disparador HTTP da Domani |
 | [frontend/README.md](frontend/README.md) | front-end: módulos, decisões, design system |
 

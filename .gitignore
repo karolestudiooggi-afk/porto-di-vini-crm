@@ -16,3 +16,6 @@ wheels/
 
 # macOS
 .DS_Store
+
+# Backups do banco (scripts/backup.sh)
+backups/

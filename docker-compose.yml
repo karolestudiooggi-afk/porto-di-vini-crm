@@ -1,0 +1,275 @@
+# =============================================================================
+# CRM Porto Di Vino — tudo numa VPS, com Docker.
+#
+#   caddy      HTTPS automático (Let's Encrypt) e roteamento do domínio
+#   front      Next.js (/)
+#   api        FastAPI (/api)
+#   agendador  sync Domani -> banco (todo dia) e continuação de campanhas (toda hora)
+#   db         Postgres do Supabase (banco do cliente)
+#   auth       login (Supabase Auth / GoTrue)         -> /auth/v1
+#   storage    imagens dos templates de e-mail        -> /storage/v1
+#   rest       PostgREST, só interno (o storage usa)
+#
+# É um recorte do docker compose oficial do Supabase (supabase/supabase,
+# pasta docker/, versões de 2026-10-16): só as peças que este CRM usa. Sem
+# Studio, Realtime, Edge Functions, Analytics nem pooler.
+#
+# Primeira vez:  ./scripts/instalar.sh     (ver docs/DOCKER.md)
+# Atualizar:     ./scripts/atualizar.sh
+#
+# Tudo é lido do .env da raiz (o mesmo do backend). As variáveis do bloco
+# "Docker" (domínio e segredos) são geradas pelo instalar.sh.
+# =============================================================================
+
+name: crm-portodivino
+
+x-api-env: &api-env
+  # O resto (SMTP, Domani, limites…) vem do .env pelo env_file.
+  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
+  SUPABASE_URL: https://${CRM_DOMINIO}
+  SUPABASE_JWT_SECRET: ${JWT_SECRET}
+  SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+  APP_URL: https://${CRM_DOMINIO}
+  CORS_ORIGINS: https://${CRM_DOMINIO}
+  DOMANI_SYNC_STATE_PATH: /estado/sync_state.json
+  TZ: America/Sao_Paulo
+
+services:
+  # ---------------------------------------------------------------------------
+  # Entrada: HTTPS e rotas
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      CRM_DOMINIO: ${CRM_DOMINIO:?defina CRM_DOMINIO no .env}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      default:
+        # Dentro do Docker, o domínio do CRM aponta direto para o Caddy: a API
+        # chama https://<domínio>/auth/v1 e /storage/v1 (convites e imagens)
+        # sem sair da VPS e voltar pela internet.
+        aliases:
+          - ${CRM_DOMINIO}
+    depends_on:
+      - front
+      - api
+      - auth
+      - storage
+
+  # ---------------------------------------------------------------------------
+  # Aplicação
+  # ---------------------------------------------------------------------------
+  front:
+    build:
+      context: .
+      dockerfile: docker/front.Dockerfile
+      args:
+        # NEXT_PUBLIC_* entram NO BUILD: mudou, rode ./scripts/atualizar.sh.
+        NEXT_PUBLIC_CLIENT_NAME: ${CLIENTE_NOME:-Porto Di Vino}
+        NEXT_PUBLIC_API_URL: https://${CRM_DOMINIO}/api
+        NEXT_PUBLIC_SUPABASE_URL: https://${CRM_DOMINIO}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY:?rode ./scripts/instalar.sh para gerar as chaves}
+    image: crm-portodivino-front
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    image: crm-portodivino-api
+    restart: unless-stopped
+    env_file: .env
+    environment: *api-env
+    # Comando (uvicorn em 8081, --root-path=/api) no docker/api.Dockerfile.
+    volumes:
+      - estado:/estado
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+
+  agendador:
+    # Mesma imagem da API. Substitui os timers do systemd (crm-*-sync e
+    # crm-*-agenda): sync Domani nos horários de SYNC_HORARIOS e continuação
+    # de campanhas toda hora cheia. Ver docker/agendador.py.
+    image: crm-portodivino-api
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      <<: *api-env
+      SYNC_HORARIOS: ${SYNC_HORARIOS:-06:00}
+    command: ["python", "-u", "/app/docker/agendador.py"]
+    volumes:
+      - estado:/estado
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Supabase (recorte do compose oficial)
+  # ---------------------------------------------------------------------------
+  db:
+    image: supabase/postgres:17.6.1.136
+    restart: unless-stopped
+    volumes:
+      # Senhas dos papéis internos (auth, storage, rest) = POSTGRES_PASSWORD.
+      - ./docker/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./docker/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+      - db_data:/var/lib/postgresql/data
+      - db_config:/etc/postgresql-custom
+      # Migrations e seed do CRM, para o instalar.sh aplicar com psql.
+      - ./backend/sql:/crm-sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: 5432
+      POSTGRES_PORT: 5432
+      PGPASSWORD: ${POSTGRES_PASSWORD:?rode ./scripts/instalar.sh para gerar as chaves}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_EXP: 3600
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+
+  auth:
+    image: supabase/gotrue:v2.197.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: https://${CRM_DOMINIO}/auth/v1
+
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+
+      GOTRUE_SITE_URL: https://${CRM_DOMINIO}
+      GOTRUE_URI_ALLOW_LIST: https://${CRM_DOMINIO}/**
+      # Ninguém se cadastra sozinho: as contas nascem pelo convite (a API cria
+      # pela service role) ou pelo scripts/criar-admin.sh.
+      GOTRUE_DISABLE_SIGNUP: "true"
+
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      # Chave simétrica HS256: é a que a API confere (app/auth.py).
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_JWT_ISSUER: https://${CRM_DOMINIO}/auth/v1
+
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+
+      # E-mail de "redefinir senha" (tela Minha conta): mesmo SMTP transacional
+      # dos convites (EMAIL_* do .env).
+      GOTRUE_SMTP_ADMIN_EMAIL: ${EMAIL_HOST_USER:-ai@estudiooggi.com}
+      GOTRUE_SMTP_HOST: ${EMAIL_HOST:-}
+      GOTRUE_SMTP_PORT: ${EMAIL_PORT:-587}
+      GOTRUE_SMTP_USER: ${EMAIL_HOST_USER:-}
+      GOTRUE_SMTP_PASS: ${EMAIL_HOST_PASSWORD:-}
+      GOTRUE_SMTP_SENDER_NAME: CRM ${CLIENTE_NOME:-Porto Di Vino}
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+
+  rest:
+    # Não é publicado no domínio: só o storage fala com ele.
+    image: postgrest/postgrest:v14.18
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage
+      PGRST_DB_MAX_ROWS: 1000
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_ADMIN_SERVER_PORT: 3001
+      PGRST_ADMIN_SERVER_HOST: localhost
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: 3600
+    command: ["postgrest"]
+
+  storage:
+    image: supabase/storage-api:v1.81.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://storage:5000/status"]
+      timeout: 5s
+      interval: 5s
+      retries: 3
+      start_period: 10s
+    environment:
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      POSTGREST_URL: http://rest:3000
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@db:5432/postgres
+      STORAGE_PUBLIC_URL: https://${CRM_DOMINIO}
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
+      FILE_SIZE_LIMIT: 52428800
+      STORAGE_BACKEND: file
+      GLOBAL_S3_BUCKET: stub
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: stub
+      REGION: stub
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+    volumes:
+      - storage_data:/var/lib/storage
+
+volumes:
+  db_data:
+  db_config:
+  storage_data:
+  caddy_data:
+  caddy_config:
+  estado:

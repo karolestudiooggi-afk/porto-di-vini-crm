@@ -1,0 +1,32 @@
+# Entrada do CRM. O Caddy tira o certificado HTTPS sozinho (Let's Encrypt)
+# assim que o domínio aponta para esta VPS e as portas 80/443 estão livres.
+#
+#   /api/*        -> API FastAPI (sem o prefixo, como no nginx do template)
+#   /auth/v1/*    -> login (Supabase Auth)
+#   /storage/v1/* -> imagens dos templates de e-mail (Supabase Storage)
+#   o resto       -> front Next.js
+#
+# O banco, o PostgREST e o agendador não aparecem aqui: ficam só na rede
+# interna do Docker.
+
+{$CRM_DOMINIO} {
+	redir /api /api/ 308
+
+	handle_path /api/* {
+		reverse_proxy api:8081
+	}
+
+	handle_path /auth/v1/* {
+		reverse_proxy auth:9999
+	}
+
+	handle_path /storage/v1/* {
+		reverse_proxy storage:5000
+	}
+
+	handle {
+		reverse_proxy front:3000
+	}
+
+	header -Server
+}

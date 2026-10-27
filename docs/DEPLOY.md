@@ -1,5 +1,10 @@
 # Deploy — CRM Porto Di Vino
 
+> **Caminho padrão da Porto: Docker** — ver [DOCKER.md](DOCKER.md). Este
+> documento é o caminho manual (systemd + nginx + Supabase à parte), para quem
+> não quiser Docker. Atenção se seguir por aqui: reaplicar todas as migrations
+> de novo falha na `004` — aplique só as novas.
+
 Passo a passo para pôr o CRM da Porto Di Vino no ar. Convenções usadas aqui e
 nos arquivos de `docs/systemd/` e `docs/nginx/`:
 

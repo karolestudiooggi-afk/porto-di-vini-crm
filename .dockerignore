@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/.next
+**/.venv
+**/__pycache__
+**/.pytest_cache
+backups
+# Segredos ficam fora das imagens: a API recebe o .env pelo compose em tempo
+# de execução, e o front recebe só as NEXT_PUBLIC_* como args de build.
+.env
+frontend/.env
+frontend/.env.local
+.sync_state*.json
