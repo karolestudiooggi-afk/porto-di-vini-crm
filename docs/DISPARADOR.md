@@ -227,7 +227,7 @@ POST   /email/campanhas/{id}/cancelar           cancela o restante da fila
 
 ## Continuação automática (timer)
 
-> **No Docker** quem faz isso é o serviço `agendador` (toda hora cheia); não
+> **No Docker** quem faz isso é o serviço `agendador`, a cada 5 minutos (`AGENDA_INTERVALO_MIN`): campanha agendada sai até 5 min depois da hora marcada; não
 > há timer do systemd para instalar. Logs: `docker compose logs -f agendador`.
 
 Uma campanha maior que a cota sai em levas. **A continuação é automática** —

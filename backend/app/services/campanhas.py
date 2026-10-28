@@ -140,6 +140,44 @@ async def _desfazer_supressoes(
         )
 
 
+async def _tirar_quem_saiu_da_base(conn: AsyncConnection, campaign_id: str, lista: str | None) -> int:
+    """Tira da fila quem deixou de poder receber DEPOIS de entrar nela.
+
+    A fila é montada na criação da campanha e pode esperar dias: campanha
+    agendada com antecedência, ou maior que a cota (no aquecimento de domínio,
+    300/dia). Nesse meio-tempo a pessoa pode se descadastrar de outra campanha,
+    dar bounce, recusar e-mail ou ser excluída do CRM. As regras de
+    `segmentos`/`parceiros` só valem na hora de montar a fila; sem esta
+    conferência, ela receberia mesmo assim — descadastro que não vale na hora
+    é o caminho mais curto para a denúncia de spam.
+
+    Marca como `suprimido` (fica no relatório, com o motivo) em vez de apagar.
+    """
+    res = await conn.execute(
+        """UPDATE email.recipients r
+              SET status = 'suprimido',
+                  erro = 'saiu da base depois de entrar na fila '
+                         '(descadastro, bounce, recusa de e-mail ou ficha excluída)'
+            WHERE r.campaign_id = %s
+              AND r.status = 'pendente'
+              AND (
+                    EXISTS (SELECT 1 FROM email.suppressions s WHERE s.email = r.email_norm)
+                 OR EXISTS (SELECT 1 FROM email.supressoes_lista l
+                             WHERE l.lista = %s AND l.email = r.email_norm)
+                 OR EXISTS (SELECT 1 FROM crm.contatos c
+                             WHERE c.id = r.contato_id
+                               AND (c.deleted_at IS NOT NULL OR c.opt_in_email IS FALSE))
+                  )""",
+        (campaign_id, lista or "clientes"),
+    )
+    tirados = getattr(res, "rowcount", 0) or 0
+    if tirados:
+        logger.info("Campanha %s: %s destinatário(s) saíram da base e não vão receber.",
+                    campaign_id, tirados)
+    await conn.commit()
+    return tirados
+
+
 async def disparar(conn: AsyncConnection, campaign_id: str, usuario_id: str) -> dict:
     """Envia os pendentes da campanha, respeitando a cota do plano.
 
@@ -164,6 +202,7 @@ async def disparar(conn: AsyncConnection, campaign_id: str, usuario_id: str) -> 
         raise ValueError("campanha cancelada")
 
     await materializar(conn, campaign_id)
+    await _tirar_quem_saiu_da_base(conn, campaign_id, camp["lista"])
 
     cota = await cota_svc.consultar(conn)
     if cota.disponivel <= 0:

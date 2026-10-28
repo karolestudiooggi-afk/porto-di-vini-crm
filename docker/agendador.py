@@ -3,9 +3,10 @@
 * **Sync Domani -> banco** (`python -m sync.main`): nos horários de
   `SYNC_HORARIOS`, no fuso America/Sao_Paulo. Padrão "06:00", como o
   `crm-*-sync.timer` do template. Aceita mais de um: "06:00,13:00".
-* **Continuação de campanhas** (`python -m app.services.agenda`): toda hora
-  cheia, como o `crm-*-agenda.timer`. Continua campanhas maiores que a cota e
-  dispara as agendadas.
+* **Campanhas** (`python -m app.services.agenda`): a cada `AGENDA_INTERVALO_MIN`
+  minutos (padrão 5). Dispara as agendadas cuja hora chegou e continua as
+  maiores que a cota. O timer do template era de hora em hora — uma campanha
+  marcada para 14:30 só saía às 15:00; com 5 minutos, sai até 14:35.
 
 Um trabalho de cada vez, nunca dois em paralelo. Se o container estava parado
 na hora marcada, o trabalho roda assim que ele volta (o `Persistent=true` do
@@ -35,6 +36,8 @@ from zoneinfo import ZoneInfo
 FUSO = ZoneInfo("America/Sao_Paulo")
 ESTADO = Path(os.getenv("AGENDADOR_ESTADO", "/estado/agendador.json"))
 INTERVALO_SEG = 30
+# De quantos em quantos minutos olhar as campanhas (1 a 60).
+AGENDA_MIN = min(60, max(1, int(os.getenv("AGENDA_INTERVALO_MIN", "5"))))
 
 # nome -> (comando, tempo máximo em segundos)
 TRABALHOS: dict[str, tuple[list[str], int]] = {
@@ -73,12 +76,14 @@ def ultimo_sync_devido(agora: datetime, horarios: list[tuple[int, int]]) -> date
     raise AssertionError("inalcançável: sempre há um horário nas últimas 24h")
 
 
-def ultima_hora_cheia(agora: datetime) -> datetime:
-    return agora.replace(minute=0, second=0, microsecond=0)
+def ultimo_bloco(agora: datetime, minutos: int | None = None) -> datetime:
+    """Início do bloco de N minutos em que `agora` está (14:37 -> 14:35 com 5)."""
+    n = minutos or AGENDA_MIN
+    return agora.replace(minute=agora.minute - agora.minute % n, second=0, microsecond=0)
 
 
 def horario_devido(nome: str, agora: datetime, horarios: list[tuple[int, int]]) -> datetime:
-    return ultimo_sync_devido(agora, horarios) if nome == "sync" else ultima_hora_cheia(agora)
+    return ultimo_sync_devido(agora, horarios) if nome == "sync" else ultimo_bloco(agora)
 
 
 def pendentes(agora: datetime, estado: dict, horarios: list[tuple[int, int]]) -> list[str]:
@@ -114,7 +119,10 @@ def log(msg: str) -> None:
 
 def rodar(nome: str) -> None:
     comando, limite = TRABALHOS[nome]
-    log(f"{nome}: começou ({' '.join(comando)})")
+    # As campanhas rodam a cada poucos minutos: só o sync anuncia o começo,
+    # para o log não virar uma lista de "começou/ok" sem nada no meio.
+    if nome == "sync":
+        log(f"{nome}: começou ({' '.join(comando)})")
     inicio = time.monotonic()
     try:
         codigo = subprocess.run(comando, cwd="/app", timeout=limite).returncode
@@ -123,7 +131,8 @@ def rodar(nome: str) -> None:
         return
     duracao = int(time.monotonic() - inicio)
     if codigo == 0:
-        log(f"{nome}: ok em {duracao}s")
+        if nome == "sync" or duracao >= 5:
+            log(f"{nome}: ok em {duracao}s")
     else:
         log(f"{nome}: FALHOU (código {codigo}) em {duracao}s — volta no próximo horário")
 
@@ -132,7 +141,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     horarios = ler_horarios(os.getenv("SYNC_HORARIOS", "06:00"))
     log("sync Domani às " + ", ".join(f"{h:02d}:{m:02d}" for h, m in horarios)
-        + " e campanhas toda hora cheia (America/Sao_Paulo)")
+        + f" e campanhas a cada {AGENDA_MIN} min (America/Sao_Paulo)")
 
     estado = carregar()
     if estado is None:

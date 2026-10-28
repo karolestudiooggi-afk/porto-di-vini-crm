@@ -4,7 +4,7 @@
 #   caddy      HTTPS automático (Let's Encrypt) e roteamento do domínio
 #   front      Next.js (/)
 #   api        FastAPI (/api)
-#   agendador  sync Domani -> banco (todo dia) e continuação de campanhas (toda hora)
+#   agendador  sync Domani -> banco (todo dia) e campanhas (a cada 5 min)
 #   db         Postgres do Supabase (banco do cliente)
 #   auth       login (Supabase Auth / GoTrue)         -> /auth/v1
 #   storage    imagens dos templates de e-mail        -> /storage/v1
@@ -107,8 +107,8 @@ services:
 
   agendador:
     # Mesma imagem da API. Substitui os timers do systemd (crm-*-sync e
-    # crm-*-agenda): sync Domani nos horários de SYNC_HORARIOS e continuação
-    # de campanhas toda hora cheia. Ver docker/agendador.py.
+    # crm-*-agenda): sync Domani nos horários de SYNC_HORARIOS e campanhas
+    # (agendadas e continuação) a cada AGENDA_INTERVALO_MIN. Ver docker/agendador.py.
     image: crm-portodivino-api
     restart: unless-stopped
     init: true
@@ -116,6 +116,7 @@ services:
     environment:
       <<: *api-env
       SYNC_HORARIOS: ${SYNC_HORARIOS:-06:00}
+      AGENDA_INTERVALO_MIN: ${AGENDA_INTERVALO_MIN:-5}
     command: ["python", "-u", "/app/docker/agendador.py"]
     volumes:
       - estado:/estado

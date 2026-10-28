@@ -127,7 +127,7 @@ do CRM: identificação, canal, status, etiquetas, histórico. Roda
 - **Na mão**: `docker compose exec api python -m sync.main`
 - **Acompanhar**: `docker compose logs -f agendador`
 
-O mesmo agendador continua, toda hora cheia, as campanhas maiores que a cota
+O mesmo agendador, a cada 5 minutos (`AGENDA_INTERVALO_MIN`), continua as campanhas maiores que a cota
 e dispara as agendadas — o que no template era o `crm-agenda.timer`.
 
 ## Dia a dia
