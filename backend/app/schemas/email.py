@@ -110,6 +110,42 @@ class CampanhaOut(BaseModel):
     stats: CampanhaStats | None = None
 
 
+class BaseEmail(BaseModel):
+    """A base de contatos do ponto de vista do e-mail. As quatro fatias não se
+    sobrepõem: cada ficha ativa cai em uma só."""
+
+    #: Têm e-mail, não recusaram e não saíram da lista — a "Toda a base".
+    recebem: int
+    #: Têm e-mail, mas disseram que não querem (opt_in_email = false).
+    sem_autorizacao: int
+    #: Descadastraram, deram bounce definitivo ou marcaram como spam.
+    sairam: int
+    sem_email: int
+
+
+class ResumoEmail(BaseModel):
+    """Topo da tela de E-mail: o resultado do período e a base."""
+
+    dias: int
+    #: E-mails que SAÍRAM no período (pela data de envio de cada um).
+    enviados: int
+    #: Campanhas que mandaram pelo menos um e-mail no período.
+    campanhas: int
+    #: Pessoas distintas, entre as que receberam no período.
+    aberturas: int
+    cliques: int
+    descadastros: int
+    bounce_hard: int
+    #: Sobre os enviados do período. Nulas sem envio ("—" na tela, não 0%).
+    taxa_abertura: Decimal | None = None
+    taxa_clique: Decimal | None = None
+    taxa_descadastro: Decimal | None = None
+    base: BaseEmail
+    #: Por onde as campanhas de clientes saem ("Nome <email>"); vazio sem
+    #: CAMPANHA_FROM_EMAIL no .env.
+    remetente: str = ""
+
+
 class PreviaSegmento(BaseModel):
     total: int
     com_email: int

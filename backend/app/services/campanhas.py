@@ -20,6 +20,7 @@ em algum canto:
 import logging
 import re
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from psycopg import AsyncConnection
 from psycopg.types.json import Json
@@ -455,6 +456,53 @@ async def relatorio(conn: AsyncConnection, campaign_id: str) -> dict | None:
         }
 
     return {"campanha": dict(camp), "stats": dict(stats)}
+
+
+async def resumo_periodo(conn: AsyncConnection, dias: int) -> dict:
+    """Resultado dos e-mails que saíram nos últimos `dias`.
+
+    O período é o do ENVIO de cada e-mail, não o da criação da campanha: uma
+    campanha de 8 mil que saiu ao longo de três semanas conta só o que saiu
+    dentro da janela. Aberturas, cliques e descadastros são pessoas distintas
+    entre esses destinatários — os mesmos critérios da vw_metricas_campanha.
+    """
+    row = await (
+        await conn.execute(
+            """
+            WITH env AS (
+              SELECT r.id, r.campaign_id
+                FROM email.recipients r
+               WHERE r.status = 'enviado'
+                 AND r.sent_at >= now() - make_interval(days => %s)
+            ),
+            ev AS (
+              SELECT count(DISTINCT e.recipient_id) FILTER (WHERE e.tipo = 'open')        AS aberturas,
+                     count(DISTINCT e.recipient_id) FILTER (WHERE e.tipo = 'click')       AS cliques,
+                     count(DISTINCT e.recipient_id) FILTER (WHERE e.tipo = 'unsubscribe') AS descadastros,
+                     count(DISTINCT e.recipient_id) FILTER (WHERE e.tipo = 'bounce_hard') AS bounce_hard
+                FROM email.events e
+                JOIN env ON env.id = e.recipient_id
+            )
+            SELECT (SELECT count(*) FROM env)                     AS enviados,
+                   (SELECT count(DISTINCT campaign_id) FROM env)  AS campanhas,
+                   ev.aberturas, ev.cliques, ev.descadastros, ev.bounce_hard
+              FROM ev
+            """,
+            (dias,),
+        )
+    ).fetchone()
+    d = dict(row)
+    env = d["enviados"]
+
+    def taxa(n: int):
+        return round(Decimal(100) * n / env, 1) if env else None
+
+    return d | {
+        "dias": dias,
+        "taxa_abertura": taxa(d["aberturas"]),
+        "taxa_clique": taxa(d["cliques"]),
+        "taxa_descadastro": taxa(d["descadastros"]),
+    }
 
 
 async def disparar_em_background(campaign_id: str, usuario_id: str) -> None:

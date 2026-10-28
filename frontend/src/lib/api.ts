@@ -3,7 +3,7 @@ import type {
   AuditoriaItem, Campanha, Convite, CampanhaStats, ContatoDetail, ContatoFiltro,
   ContatoFiltros, ContatoListItem, ContatoPatch, ContatoStats, Cota,
   DashboardAtividade, DashboardConsumo, DashboardDistribuicoes, DashboardResumo, Destinatario, DisparoIniciado,
-  EmailTemplate, ImportReport, Me, Page, PreviaSegmento, ResultadoEnvio,
+  EmailTemplate, ImportReport, Me, Page, PreviaSegmento, ResultadoEnvio, ResumoEmail,
   ImportacaoParceiros, ListaEmail, PaginaParceiros, Parceiro, ParceiroIn, ParceirosNumeros,
   AvisoMonitor, ConfigMonitor, DetalheMonitor, EmailMonitor, ImportacaoMonitor, OrigemMonitor,
   PaginaMonitor, PainelMonitor, SituacaoMonitor,
@@ -133,6 +133,8 @@ export const api = {
   email: {
     /** Consumo do plano. Consultar ANTES de habilitar o disparo. */
     cota: () => request<Cota>("GET", "/email/cota"),
+    /** Resultado dos últimos `dias` (pela data de envio) e o tamanho da base. */
+    resumo: (dias = 30) => request<ResumoEmail>("GET", "/email/resumo", { query: { dias } }),
 
     templates: {
       /** Sem `lista`, todos; com ela, só os da aba. */

@@ -15,7 +15,16 @@ export function PainelCota({ compacto = false }: { compacto?: boolean }) {
   const { data: c, loading, error } = useApi(() => api.email.cota(), []);
 
   if (loading) {
-    return <div className="skeleton h-20 rounded-2xl" />;
+    return compacto
+      ? <span className="text-xs text-muted">Lendo a cota de envio…</span>
+      : <div className="skeleton h-20 rounded-2xl" />;
+  }
+  if (compacto && (error || !c)) {
+    return (
+      <span className="text-xs font-bold text-red-600">
+        Não deu para ler a cota de envio — o disparo fica bloqueado até voltar.
+      </span>
+    );
   }
 
   // Falha aqui PRECISA aparecer. Ficar no esqueleto para sempre deixa a tela com
@@ -62,7 +71,7 @@ export function PainelCota({ compacto = false }: { compacto?: boolean }) {
         </span>
       </div>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-4 grid gap-x-4 gap-y-3 sm:grid-cols-3">
         <Barra
           rotulo="Nesta hora"
           usado={c.enviados_hora}

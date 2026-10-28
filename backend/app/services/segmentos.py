@@ -168,6 +168,35 @@ async def previa(conn: AsyncConnection, seg: dict) -> dict:
     }
 
 
+async def numeros_base(conn: AsyncConnection) -> dict:
+    """A base de contatos em quatro fatias que não se sobrepõem.
+
+    `recebem` é exatamente a "Toda a base elegível" de uma campanha (as
+    `_REGRAS`). As outras dizem por que o resto não recebe, na ordem em que a
+    pessoa da Porto pergunta: não tem e-mail? não autorizou? saiu da lista?
+    """
+    row = await (
+        await conn.execute(
+            """
+            SELECT
+              count(*) FILTER (WHERE c.email_norm IS NULL)                     AS sem_email,
+              count(*) FILTER (WHERE c.email_norm IS NOT NULL AND s.email IS NOT NULL) AS sairam,
+              count(*) FILTER (WHERE c.email_norm IS NOT NULL AND s.email IS NULL
+                                 AND c.opt_in_email IS FALSE)                  AS sem_autorizacao,
+              count(*) FILTER (WHERE c.email_norm IS NOT NULL AND s.email IS NULL
+                                 AND coalesce(c.opt_in_email, true) IS TRUE)   AS recebem
+              FROM crm.contatos c
+              LEFT JOIN LATERAL (
+                    SELECT s.email FROM email.suppressions s
+                     WHERE s.email = c.email_norm LIMIT 1
+              ) s ON true
+             WHERE c.deleted_at IS NULL
+            """
+        )
+    ).fetchone()
+    return dict(row)
+
+
 async def contar_excluidos(conn: AsyncConnection, seg: dict) -> dict:
     """Quem o filtro pegaria mas as regras barraram.
 

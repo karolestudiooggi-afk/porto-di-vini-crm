@@ -405,7 +405,39 @@ export interface Campanha {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  /** Na lista, as métricas de cada campanha (mesma view do relatório). */
   stats?: CampanhaStats;
+  /** Só no relatório: o HTML congelado na criação, que é o que sai. */
+  html_snapshot?: string;
+}
+
+/** A base vista pelo e-mail, em fatias que não se sobrepõem (GET /email/resumo). */
+export interface BaseEmail {
+  /** Têm e-mail, não recusaram e não saíram da lista — a "Toda a base". */
+  recebem: number;
+  /** Têm e-mail, mas disseram que não querem. */
+  sem_autorizacao: number;
+  /** Descadastraram, deram bounce definitivo ou marcaram como spam. */
+  sairam: number;
+  sem_email: number;
+}
+
+/** Topo da tela de E-mail: o que saiu nos últimos `dias` e a base. */
+export interface ResumoEmail {
+  dias: number;
+  enviados: number;
+  campanhas: number;
+  aberturas: number;
+  cliques: number;
+  descadastros: number;
+  bounce_hard: number;
+  /** Sobre os enviados do período; nulas sem envio. */
+  taxa_abertura: string | null;
+  taxa_clique: string | null;
+  taxa_descadastro: string | null;
+  base: BaseEmail;
+  /** "Nome <email>" das campanhas de clientes; vazio sem configuração. */
+  remetente: string;
 }
 
 /** Resposta do disparo. O envio roda em segundo plano, então isto diz o que foi

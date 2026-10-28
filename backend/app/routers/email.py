@@ -19,7 +19,7 @@ from app.db import get_conn
 from app.schemas.email import (
     CampanhaIn, CampanhaOut, CotaOut, DisparoIniciado, ImportacaoParceiros, Lista,
     ParceiroIn, ParceiroOut, ParceiroPatch, ParceirosNumeros, ParceirosPagina,
-    PreviaSegmento, TemplateIn, TemplateOut,
+    PreviaSegmento, ResumoEmail, TemplateIn, TemplateOut,
 )
 from app.services import campanhas as svc
 from app.services import cota as cota_svc
@@ -172,20 +172,58 @@ async def listar_campanhas(
     leva; durante um envio (ou se a leva morreu no meio, num reinício da API)
     ela mostrava 0 aqui enquanto o relatório já mostrava os que receberam.
     """
+    # As métricas vêm da mesma view do relatório (vw_metricas_campanha): a
+    # abertura e os cliques da tabela são os mesmos números da tela da campanha.
     rows = await (await conn.execute(
         """SELECT c.*, t.nome AS template_nome,
-                  (SELECT count(*) FROM email.recipients r
-                    WHERE r.campaign_id = c.id AND r.status = 'enviado') AS enviados_agora
+                  coalesce(m.enviados, 0)     AS m_enviados,
+                  coalesce(m.pendentes, 0)    AS m_pendentes,
+                  coalesce(m.suprimidos, 0)   AS m_suprimidos,
+                  coalesce(m.publico, 0)      AS m_publico,
+                  coalesce(m.aberturas, 0)    AS m_aberturas,
+                  coalesce(m.cliques, 0)      AS m_cliques,
+                  coalesce(m.bounce_hard, 0)  AS m_bounce_hard,
+                  coalesce(m.bounce_soft, 0)  AS m_bounce_soft,
+                  coalesce(m.descadastros, 0) AS m_descadastros,
+                  m.taxa_abertura    AS m_taxa_abertura,
+                  m.taxa_clique      AS m_taxa_clique,
+                  m.taxa_bounce_hard AS m_taxa_bounce_hard,
+                  m.taxa_bounce_soft AS m_taxa_bounce_soft,
+                  m.taxa_descadastro AS m_taxa_descadastro,
+                  coalesce(x.processando, 0)  AS m_processando,
+                  coalesce(x.falhas, 0)       AS m_falhas
              FROM email.campaigns c
              LEFT JOIN email.templates t ON t.id = c.template_id
+             LEFT JOIN email.vw_metricas_campanha m ON m.campaign_id = c.id
+             LEFT JOIN LATERAL (
+                   SELECT count(*) FILTER (WHERE r.status = 'processando') AS processando,
+                          count(*) FILTER (WHERE r.status = 'falhou')      AS falhas
+                     FROM email.recipients r WHERE r.campaign_id = c.id
+             ) x ON true
             WHERE %s::text IS NULL OR c.lista = %s
             ORDER BY c.created_at DESC""", (lista, lista))).fetchall()
     saida = []
     for r in rows:
         linha = dict(r)
-        linha["enviados"] = linha.pop("enviados_agora")
-        saida.append(linha | {"id": str(r["id"])})
+        stats = {k[2:]: linha.pop(k) for k in list(linha) if k.startswith("m_")}
+        linha["enviados"] = stats["enviados"]
+        saida.append(linha | {"id": str(r["id"]), "stats": stats})
     return saida
+
+
+@router.get("/resumo", response_model=ResumoEmail)
+async def resumo_email(
+    dias: int = Query(default=30, ge=1, le=365),
+    conn: AsyncConnection = Depends(get_conn),
+    _: dict = Depends(require_perm("campanhas:manage")),
+):
+    """Os números do topo da tela de E-mail: o resultado dos últimos `dias` e o
+    tamanho da base que pode receber."""
+    return {
+        **await svc.resumo_periodo(conn, dias),
+        "base": await segmentos.numeros_base(conn),
+        "remetente": texto_da_lista("clientes"),
+    }
 
 
 @router.post("/campanhas", response_model=CampanhaOut)

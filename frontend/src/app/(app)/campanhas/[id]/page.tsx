@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AvisoSimulacao, PainelCota } from "@/components/campanhas/painel-cota";
-import { SeloParceiro, enderecoDe } from "@/components/campanhas/lista-campanhas";
+import { SeloParceiro, SeloSituacao, enderecoDe, pct } from "@/components/campanhas/lista-campanhas";
+import { CartaoPreviaEmail, escolherPessoa } from "@/components/campanhas/previa-email";
+import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CLIENTE } from "@/config/cliente";
 import { api } from "@/lib/api";
@@ -13,6 +15,9 @@ import { dataHoraBR, num } from "@/lib/format";
 import type { Destinatario, DisparoIniciado } from "@/lib/api-types";
 import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/providers/auth";
+
+/** Linhas desenhadas de uma vez: campanha de 7 mil pessoas travaria a tela. */
+const LIMITE_LINHAS = 300;
 
 const TOM_DEST: Record<string, string> = {
   enviado: "bg-emerald-500/15 text-emerald-700",
@@ -31,8 +36,15 @@ export default function CampanhaPage() {
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<DisparoIniciado | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
 
   const c = rel.data?.campanha;
+  const termo = busca.trim().toLowerCase();
+  const destinatarios = useMemo(
+    () => (termo
+      ? dest.data?.filter((d) => `${d.nome ?? ""} ${d.email}`.toLowerCase().includes(termo))
+      : dest.data) ?? null,
+    [dest.data, termo]);
   const s = rel.data?.stats;
 
   // Enquanto a campanha está enviando, o relatório se atualiza sozinho.
@@ -107,22 +119,24 @@ export default function CampanhaPage() {
 
   return (
     <div className="space-y-4">
-      <header className="rounded-3xl border border-line/10 bg-surface px-5 py-5 shadow-domani-lift sm:px-6">
+      <header className="rounded-3xl border border-line/10 bg-surface px-5 py-6 shadow-domani-lift sm:px-6">
         <Link href={daAbaParceiros ? "/campanhas?aba=parceiros" : "/campanhas"}
-              className="text-xs font-bold text-muted hover:text-domani-orange-600">
-          ← E-mail{daAbaParceiros ? " · Parceiros" : ""}
+              className="inline-flex items-center gap-1 text-xs font-bold text-ink/70 hover:text-domani-orange-600">
+          <Icon name="chevronLeft" className="h-3.5 w-3.5" strokeWidth={2.2} />
+          E-mail{daAbaParceiros ? " · Parceiros" : ""}
         </Link>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-          <div>
+          <div className="min-w-0 max-w-3xl">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-2xl font-extrabold tracking-tight">{c.nome}</h1>
+              <h1 className="font-display text-[1.7rem] font-extrabold leading-tight tracking-tight">{c.nome}</h1>
               {c.lista === "parceiros" && <SeloParceiro />}
             </div>
             <p className="mt-1 text-sm text-muted">
-              {c.segmento_label} · {num(c.com_email)} destinatários · {c.status}
+              {c.segmento_label} · {num(c.com_email)} destinatários
               {c.remetente && <> · sai por {enderecoDe(c.remetente)}</>}
             </p>
           </div>
+          {!agendadaFutura && !podeDisparar && <SeloSituacao status={c.status} className="mb-1" />}
           {agendadaFutura && (
             <div className="flex flex-col items-end gap-1 text-right">
               <span className="rounded-xl border border-domani-orange/30 bg-domani-orange/10 px-4 py-2.5 text-sm font-bold text-domani-orange-600">
@@ -138,6 +152,8 @@ export default function CampanhaPage() {
           )}
           {podeDisparar && (
             <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-3">
+              <SeloSituacao status={c.status} />
               <button onClick={() => setConfirmar(true)} disabled={botaoBloqueado}
                       className="rounded-xl bg-domani-orange px-5 py-2.5 text-sm font-bold text-white transition hover:bg-domani-orange-600 disabled:cursor-not-allowed disabled:opacity-40">
                 {botaoBloqueado
@@ -146,6 +162,7 @@ export default function CampanhaPage() {
                     ? "Continuar envio"
                     : "Disparar campanha"}
               </button>
+              </div>
               {emProcessamento && (
                 <span className="text-[11px] text-muted">
                   Envio em andamento · não é preciso clicar de novo
@@ -208,65 +225,88 @@ export default function CampanhaPage() {
                  alerta={Number(s?.taxa_descadastro ?? 0) > 0.5} />
       </section>
 
-      <PainelCota />
-
-      <section className="overflow-hidden rounded-3xl border border-line/10 bg-surface shadow-domani-lift">
-        <div className="border-b border-line/10 px-5 py-4">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
-            Destinatários
-          </h2>
-        </div>
-        {dest.loading ? (
-          <div className="space-y-2 p-5">
-            {Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton h-9 rounded-lg" />)}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <section className="overflow-hidden rounded-3xl border border-line/10 bg-surface shadow-domani-lift">
+          <div className="border-b border-line/10 px-5 py-4">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
+              Destinatários
+            </h2>
+            {!!dest.data?.length && (
+              <input value={busca} onChange={(e) => setBusca(e.target.value)}
+                     placeholder="Buscar nome ou e-mail"
+                     className="mt-3 w-full rounded-2xl border border-line/15 bg-app px-4 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted focus:border-domani-orange focus:bg-surface" />
+            )}
           </div>
-        ) : !dest.data?.length ? (
-          <p className="px-6 py-12 text-center text-sm text-muted">
-A lista de quem recebeu aparece aqui depois do disparo.
-          </p>
-        ) : (
-          <div className="max-h-[420px] overflow-y-auto">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead className="sticky top-0 bg-surface">
-                <tr className="border-b border-line/10 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
-                  <th className="px-5 py-3">Contato</th>
-                  <th className="px-5 py-3">Situação</th>
-                  <th className="px-5 py-3 text-right">Aberturas</th>
-                  <th className="px-5 py-3 text-right">Cliques</th>
-                  <th className="px-5 py-3">Enviado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dest.data.map((d: Destinatario) => (
-                  <tr key={d.id} className="border-b border-line/[0.08]">
-                    <td className="px-5 py-2.5">
-                      <div className="font-medium text-ink">{d.nome ?? "—"}</div>
-                      <div className="text-xs text-muted">{d.email}</div>
-                    </td>
-                    <td className="px-5 py-2.5">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${TOM_DEST[d.status]}`}>
-                        {d.status}
-                      </span>
-                      {d.erro && (
-                        <div className="mt-0.5 max-w-[280px] truncate text-[11px] text-muted" title={d.erro}>
-                          {d.erro}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-5 py-2.5 text-right text-ink/70 [font-variant-numeric:tabular-nums]">
-                      {d.aberturas}
-                    </td>
-                    <td className="px-5 py-2.5 text-right text-ink/70 [font-variant-numeric:tabular-nums]">
-                      {d.cliques}
-                    </td>
-                    <td className="px-5 py-2.5 text-xs text-ink/70">{dataHoraBR(d.sent_at)}</td>
+          {dest.loading ? (
+            <div className="space-y-2 p-5">
+              {Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton h-9 rounded-lg" />)}
+            </div>
+          ) : !dest.data?.length ? (
+            <p className="px-6 py-12 text-center text-sm text-muted">
+              A lista de quem recebeu aparece aqui depois do disparo.
+            </p>
+          ) : !destinatarios?.length ? (
+            <p className="px-6 py-12 text-center text-sm text-muted">Ninguém com “{busca}” nesta campanha.</p>
+          ) : (
+            <div className="max-h-[560px] overflow-auto">
+              <table className="w-full min-w-[520px] border-collapse text-sm">
+                <thead className="sticky top-0 z-[1] bg-surface">
+                  <tr className="border-b border-line/10 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+                    <th className="py-3 pl-5 pr-4">Contato</th>
+                    <th className="px-4 py-3">Situação</th>
+                    <th className="px-4 py-3 text-right">Aberturas</th>
+                    <th className="py-3 pl-4 pr-5 text-right">Cliques</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                </thead>
+                <tbody>
+                  {destinatarios.slice(0, LIMITE_LINHAS).map((d: Destinatario) => (
+                    <tr key={d.id} className="border-b border-line/[0.08] last:border-0">
+                      <td className="max-w-[210px] py-3 pl-5 pr-4">
+                        <div className="truncate font-medium text-ink" title={d.nome || d.email}>{d.nome || d.email}</div>
+                        {d.nome && <div className="truncate text-xs text-muted" title={d.email}>{d.email}</div>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${TOM_DEST[d.status] ?? TOM_DEST.pendente}`}>
+                          {d.status}
+                        </span>
+                        {d.erro ? (
+                          <div className="mt-0.5 max-w-[180px] truncate text-[11px] text-muted" title={d.erro}>
+                            {d.erro}
+                          </div>
+                        ) : d.sent_at ? (
+                          <div className="mt-0.5 text-[11px] text-muted [font-variant-numeric:tabular-nums]">
+                            {dataHoraBR(d.sent_at)}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-right text-ink/70 [font-variant-numeric:tabular-nums]">
+                        {d.aberturas}
+                      </td>
+                      <td className="py-3 pl-4 pr-5 text-right text-ink/70 [font-variant-numeric:tabular-nums]">
+                        {d.cliques}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {destinatarios.length > LIMITE_LINHAS && (
+                <p className="border-t border-line/10 px-5 py-3 text-xs text-muted">
+                  Mostrando {num(LIMITE_LINHAS)} de {num(destinatarios.length)}. Use a busca para achar alguém.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+        {c.html_snapshot ? (
+          <CartaoPreviaEmail
+            html={c.html_snapshot} assunto={c.assunto}
+            pessoa={escolherPessoa(dest.data)}
+          />
+        ) : null}
+      </div>
+
+      <PainelCota />
 
       <ConfirmDialog
         open={confirmar}
@@ -286,12 +326,6 @@ A lista de quem recebeu aparece aqui depois do disparo.
       />
     </div>
   );
-}
-
-/** Percentual vindo da API. Nulo vira "—": sem envio, 0% seria mentira. */
-function pct(valor: string | null | undefined): string {
-  if (valor === null || valor === undefined) return "—";
-  return `${Number(valor).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }
 
 function Metrica({
