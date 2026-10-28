@@ -51,34 +51,40 @@ const LARGURA_EMAIL = 640;
  *
  * Num quadro mais estreito que o e-mail, ele é desenhado na largura real e
  * reduzido — como na prévia do celular — em vez de sair cortado do lado.
+ *
+ * Sem `altura`, ocupa o espaço do pai (que precisa ser `relative`) e rola por
+ * dentro: assim o cartão acompanha a altura do que está ao lado, em vez de
+ * empurrar a página com um retângulo branco.
  */
-export function QuadroEmail({ html, pessoa, altura = 460 }: {
+export function QuadroEmail({ html, pessoa, altura }: {
   html: string;
   pessoa: PessoaPrevia | null;
   altura?: number;
 }) {
   const caixa = useRef<HTMLDivElement>(null);
-  const [largura, setLargura] = useState(LARGURA_EMAIL);
+  const [tam, setTam] = useState({ w: LARGURA_EMAIL, h: altura ?? 400 });
   useEffect(() => {
     const el = caixa.current;
     if (!el) return;
-    const medir = () => setLargura(el.clientWidth || LARGURA_EMAIL);
+    const medir = () => setTam({ w: el.clientWidth || LARGURA_EMAIL, h: el.clientHeight || altura || 400 });
     medir();
     const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-  const escala = Math.min(1, largura / LARGURA_EMAIL);
+  }, [altura]);
+  const escala = Math.min(1, tam.w / LARGURA_EMAIL);
   return (
-    <div ref={caixa} className="overflow-hidden bg-white" style={{ height: altura }}>
+    <div ref={caixa}
+         className={altura ? "relative overflow-hidden bg-white" : "absolute inset-0 overflow-hidden bg-white"}
+         style={altura ? { height: altura } : undefined}>
       <iframe
         title="Prévia do e-mail"
         sandbox=""
         srcDoc={aplicarVariaveis(html, pessoa)}
-        className="block border-0 bg-white"
+        className="absolute left-0 top-0 block border-0 bg-white"
         style={{
           width: escala < 1 ? LARGURA_EMAIL : "100%",
-          height: altura / escala,
+          height: tam.h / escala,
           transform: escala < 1 ? `scale(${escala})` : undefined,
           transformOrigin: "0 0",
         }}
@@ -103,7 +109,7 @@ export function CartaoPreviaEmail({ html, assunto, pessoa }: {
   const [aberto, setAberto] = useState(false);
   const assuntoFinal = aplicarVariaveis(assunto, pessoa, false);
   return (
-    <section className="overflow-hidden rounded-3xl border border-line/10 bg-surface shadow-domani-lift">
+    <section className="flex flex-col overflow-hidden rounded-3xl border border-line/10 bg-surface shadow-domani-lift">
       <div className="flex items-start justify-between gap-3 border-b border-line/10 px-5 py-4">
         <div className="min-w-0">
           <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">Prévia do e-mail</h2>
@@ -114,7 +120,11 @@ export function CartaoPreviaEmail({ html, assunto, pessoa }: {
           Expandir
         </button>
       </div>
-      <QuadroEmail html={html} pessoa={pessoa} altura={560} />
+      {/* Altura: a do cartão ao lado (destinatários), com um mínimo para o
+          e-mail ser legível. Empilhado (tela estreita), fica mais alto. */}
+      <div className="relative min-h-[460px] flex-1 xl:min-h-[300px]">
+        <QuadroEmail html={html} pessoa={pessoa} />
+      </div>
       <JanelaPreviaEmail aberto={aberto} onFechar={() => setAberto(false)}
                          html={html} assunto={assunto} pessoa={pessoa} />
     </section>

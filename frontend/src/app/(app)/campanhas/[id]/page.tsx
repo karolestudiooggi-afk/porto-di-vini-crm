@@ -225,7 +225,9 @@ export default function CampanhaPage() {
                  alerta={Number(s?.taxa_descadastro ?? 0) > 0.5} />
       </section>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      {/* As duas colunas com a mesma altura: a prévia se ajusta à lista de
+          destinatários (e rola por dentro), sem sobrar espaço embaixo. */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section className="overflow-hidden rounded-3xl border border-line/10 bg-surface shadow-domani-lift">
           <div className="border-b border-line/10 px-5 py-4">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
