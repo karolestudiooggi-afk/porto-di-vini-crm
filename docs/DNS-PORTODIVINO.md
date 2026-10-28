@@ -76,8 +76,8 @@ envio sem falhas — não é necessário para começar.
 
 ## Remetente
 
-As campanhas saem como `Porto Di Vino <site@portodivino.com.br>`. A caixa
-`site@` já existe na Porto: é para ela que vão as respostas dos clientes e o
+As campanhas saem como `Porto Di Vino <borabrindar@portodivino.com.br>`. A caixa
+`borabrindar@` já existe na Porto: é para ela que vão as respostas dos clientes e o
 e-mail de confirmação do SendPulse.
 
 ## Como conferir

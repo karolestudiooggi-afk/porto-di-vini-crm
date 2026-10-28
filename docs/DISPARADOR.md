@@ -8,7 +8,7 @@ precisa estar certo fora do código para o e-mail não cair em spam.
 | | Porto Di Vino |
 |---|---|
 | Provedor | SendPulse (SMTP) |
-| Remetente | `Porto Di Vino <site@portodivino.com.br>` |
+| Remetente | `Porto Di Vino <borabrindar@portodivino.com.br>` |
 | Domínio a autenticar | `portodivino.com.br` — ver [DNS-PORTODIVINO.md](DNS-PORTODIVINO.md) |
 | Aquecimento | começa em 300/dia e 150/hora (`.env.example`) |
 | Público | base importada do e-commerce/clube + contatos do Domani que tenham e-mail |
@@ -30,7 +30,7 @@ precisa estar certo fora do código para o e-mail não cair em spam.
 | Variável | Para quê |
 |---|---|
 | `CAMPANHA_SMTP_HOST`, `_PORT`, `_USE_TLS`, `_USER`, `_PASSWORD` | conta SMTP do provedor |
-| `CAMPANHA_FROM_EMAIL` | remetente: `"Porto Di Vino <site@portodivino.com.br>"` |
+| `CAMPANHA_FROM_EMAIL` | remetente: `"Porto Di Vino <borabrindar@portodivino.com.br>"` |
 | `EMAIL_DRY_RUN` | `true` (padrão) não abre conexão SMTP |
 | `SMTP_LIMITE_MES`, `SMTP_LIMITE_DIA`, `SMTP_LIMITE_HORA` | as três janelas de cota (abaixo) |
 | `SMTP_MARGEM`, `SMTP_INTERVALO_SEG` | folga da janela e pausa entre mensagens |
