@@ -167,9 +167,9 @@ A Porto usa a **conta SendPulse da Domani** (`ai@estudiooggi.com`), a mesma de
 todos os CRMs. O que isso implica:
 
 - **Cota do mês dividida.** Cada CRM conta só o que ele mesmo enviou. A soma do
-  `SMTP_LIMITE_MES` de todos os CRMs precisa ficar abaixo do plano, com folga.
-  A Porto usa 10.000 (a base inteira cabe num dia: 8.000/dia, 1.200/h); a
-  Mamma Jamma usa 10.000. Mudou a divisão: ajuste
+  `SMTP_LIMITE_MES` de todos os CRMs precisa ficar abaixo do plano (100.000
+  e-mails/mês), com folga. A Porto usa 20.000 (a base inteira cabe num dia:
+  8.000/dia, 1.200/h); a Mamma Jamma usa 10.000. Mudou a divisão: ajuste
   o `.env` de cada um e reinicie a API dele.
 - **Limite de 2.500/h dividido.** É da conta, não do CRM. Se dois CRMs
   dispararem na mesma hora e passarem disso, o SendPulse recusa; o
