@@ -168,7 +168,8 @@ todos os CRMs. O que isso implica:
 
 - **Cota do mês dividida.** Cada CRM conta só o que ele mesmo enviou. A soma do
   `SMTP_LIMITE_MES` de todos os CRMs precisa ficar abaixo do plano, com folga.
-  A Porto começa com 5.000; a Mamma Jamma usa 10.000. Mudou a divisão: ajuste
+  A Porto usa 10.000 (a base inteira cabe num dia: 8.000/dia, 1.200/h); a
+  Mamma Jamma usa 10.000. Mudou a divisão: ajuste
   o `.env` de cada um e reinicie a API dele.
 - **Limite de 2.500/h dividido.** É da conta, não do CRM. Se dois CRMs
   dispararem na mesma hora e passarem disso, o SendPulse recusa; o
